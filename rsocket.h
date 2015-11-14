@@ -30,6 +30,13 @@
 int r_socket(int domain, int type, int protocol);
 
 /*
+ * r_bind binds a socket to any given name.
+ * It is just as same as the bind call.
+ *
+ * */
+int r_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+
+/*
  * r_sendto sends the data using the underlying UDP
  * sockets in a reliable manner. This functions guarantees
  * the packet delivery.
@@ -39,11 +46,21 @@ ssize_t r_sendto(int sockfd, const void *buf, size_t len, int flags,
 		const struct sockaddr *dest_addr, socklen_t addrlen);
 
 /*
- * r_recvfrom receives data from a peer. Which sends packets
+ * r_recvfrom receives data from a peer. Which sends ACK
+ * packets back to the sender.
  *
  *
  * */
 ssize_t r_recvfrom(int sockfd, void *buf, size_t len, int flags,
 		struct sockaddr *src_addr, socklen_t *addrlen);
+
+/*
+ * r_close closes the socket
+ * kills all threads and frees all memory associated
+ * with the socket. If any data is there in the
+ * received-message table, it is discarded.
+ *
+ **/
+int r_close(int fd);
 
 #endif
