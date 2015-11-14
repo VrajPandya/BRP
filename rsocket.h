@@ -17,8 +17,9 @@
 #define RSOCKET_H_
 
 #include<sys/types.h>
+#include<sys/socket.h>
 
-#define SOCK_BRP //TODO: allocate a number to the value
+#define SOCK_BRP SOCK_DGRAM//TODO: allocate a number to the value
 
 /*
  * r_socket is just like a socket() call which returns a
