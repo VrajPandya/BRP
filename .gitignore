@@ -6,3 +6,8 @@
 
 #build folder
 */build
+
+#eclipse project files
+.cproject
+.project
+
