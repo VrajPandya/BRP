@@ -1,5 +1,1 @@
-make
-cd dropMessage
-make
-cd ../TestUtil
-make
+make all

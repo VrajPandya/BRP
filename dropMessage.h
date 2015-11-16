@@ -1,5 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
+#ifndef DROPMESSAGE_H
+#define DROPMESSAGE_H
 
 /*
  * This function returns 1 if generated random number is less than parameter value p.
@@ -13,3 +13,4 @@ int dropMessage(double p);
  * This function returns random number generated between 0 and 1.
  * */
 double random_generator(double min,double max);
+#endif

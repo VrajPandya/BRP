@@ -3,7 +3,7 @@
  * using BRP sockets.
  * */
 
-#include"../rsocket.h"
+#include"rsocket.h"
 #include"user.h"
 #include<stdio.h>
 #include<sys/socket.h>
@@ -42,15 +42,14 @@ int main(int argc, char* argv[]) {
 		return 0;
 	}
 
+	printf("waiting on port %d\n", user2portNum);
 	/* now loop, receiving data and printing what we received */
 	for (;;) {
-		printf("waiting on port %d\n", user2portNum);
 		recvlen = r_recvfrom(sock, buf, BufSize, 0, (struct sockaddr *) &user1Addr,
 				&addrlen);
-		printf("received %d bytes\n", recvlen);
 		if (recvlen > 0) {
 			buf[recvlen] = 0;
-			printf("received message: \"%s\"\n", buf);
+			printf("%s", buf);
 		}
 	}
 	/* never exits */}

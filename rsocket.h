@@ -19,7 +19,11 @@
 #include<sys/types.h>
 #include<sys/socket.h>
 
-#define SOCK_BRP SOCK_DGRAM//TODO: allocate a number to the value
+#define SOCK_BRP 11
+
+#define DROP_PKT 1
+
+#define DROP_PROB 0.5
 
 /*
  * r_socket is just like a socket() call which returns a
