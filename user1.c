@@ -19,13 +19,13 @@ int main(int argc, const char* argv[]) {
 	struct sockaddr_in user1Addr, user2Addr;
 	int sock, i, slen = sizeof(user2Addr);
 	char *server = "127.0.0.1"; /* change this to use a different server */
-	int bufSize = 1024;
+	int bufSize = BRP_MTU;
 	char* buf;
 	int retVal;
 
 	/* create a socket */
 
-	if ((sock = r_socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+	if ((sock = r_socket(AF_INET, SOCK_BRP, 0)) == -1)
 		printf("socket created\n");
 
 	/* bind it to all local addresses and pick any port number */

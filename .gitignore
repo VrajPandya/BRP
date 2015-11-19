@@ -10,4 +10,16 @@
 #eclipse project files
 .cproject
 .project
+.settings/
+
+#lib files
+*.a
+
+#output files
+user1
+user2
+
+#core dump
+core
+
 

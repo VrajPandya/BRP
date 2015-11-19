@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
 
 	/* create a UDP socket */
 
-	if ((sock = r_socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+	if ((sock = r_socket(AF_INET, SOCK_BRP, 0)) < 0) {
 		perror("cannot create socket\n");
 		return 0;
 	}

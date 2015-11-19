@@ -17,7 +17,7 @@
 #define BRP_PKT_SIZE(L) L + 1 + 4
 
 typedef struct threadArg {
-	int sock;
+	int sockFd;
 } threadArg_t;
 
 /*
@@ -241,21 +241,22 @@ static char* createBrpPktData(brpPkt_t* pkt) {
 	int curOffset = 0;
 	char* res = (char*) malloc(BRP_PKT_SIZE(pkt->datalen));
 	char* offsetPtr = res;
-	memset(offsetPtr, &pkt->flags, sizeof(u_int8_t));
+	memcpy(offsetPtr, &pkt->flags, sizeof(u_int8_t));
 	offsetPtr += sizeof(u_int8_t);
-	memset(offsetPtr, &pkt->secquenceNumber, sizeof(u_int32_t));
+	memcpy(offsetPtr, &pkt->secquenceNumber, sizeof(u_int32_t));
 	offsetPtr += sizeof(u_int32_t);
-	memset(offsetPtr, pkt->data, pkt->datalen);
+	memcpy(offsetPtr, pkt->data, pkt->datalen);
 	return res;
 }
 
 static void* S(void* arg) {
 	threadArg_t* args = (threadArg_t*) arg;
-	int sock = args->sock;
+	int sock = args->sockFd;
 	brpPktEntry_t* pktEntry;
 	brpPkt_t* pkt;
 	char* pktData;
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+	free(arg);
 	brpSockInfo_t* sockInfo = getBrpSockInfo(sock);
 	pthread_mutex_t* unAckedTableMutex = sockInfo->unAckedPktTableMutex;
 	while (1) {
@@ -313,7 +314,7 @@ static void* R(void* arg) {
 	struct sockaddr srcAddr;
 	brpPkt_t* pkt;
 	threadArg_t* args = (threadArg_t*) arg;
-	int sock = args->sock;
+	int sock = args->sockFd;
 	socklen_t len = sizeof(struct sockaddr);
 	uint8_t curPktflags;
 	uint32_t curPktSecquenceNo;
@@ -323,6 +324,7 @@ static void* R(void* arg) {
 	brpPktEntry_t* unAckedPktTable = sockInfo->unAckedpktTable;
 	brpPktEntry_t* recvedMsgTable = sockInfo->recvedMsgTable;
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+	free(arg);
 	int brpFlag = PKT_ACK;
 	memcpy(replyBuf, (int*) &brpFlag, sizeof(uint8_t));
 	while (1) {
@@ -375,13 +377,13 @@ extern int r_socket(int domain, int type, int protocol) {
 			/*start set thread arguments*/
 			threadArg_t* sArg = (threadArg_t*) malloc(sizeof(threadArg_t));
 			threadArg_t* rArg = (threadArg_t*) malloc(sizeof(threadArg_t));
-			sArg->sock = retVal;
-			rArg->sock = retVal;
+			sArg->sockFd = retVal;
+			rArg->sockFd = retVal;
 			/*end set basic data structures for BRP socket*/
 
 			/*start run threads S and R*/
-			pthread_create(sockInfo->R, (void*) rArg, R, NULL);
-			pthread_create(sockInfo->S, (void*) sArg, S, NULL);
+			pthread_create(sockInfo->R, NULL, R, (void*) rArg);
+			pthread_create(sockInfo->S, NULL, S, (void*) sArg);
 			/*end run thread S and R*/
 
 		}
