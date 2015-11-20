@@ -238,7 +238,6 @@ static brpPktEntry_t* getRecvedMsg(int sock) {
 }
 
 static char* createBrpPktData(brpPkt_t* pkt) {
-	int curOffset = 0;
 	char* res = (char*) malloc(BRP_PKT_SIZE(pkt->datalen));
 	char* offsetPtr = res;
 	memcpy(offsetPtr, &pkt->flags, sizeof(u_int8_t));
@@ -246,6 +245,7 @@ static char* createBrpPktData(brpPkt_t* pkt) {
 	memcpy(offsetPtr, &pkt->secquenceNumber, sizeof(u_int32_t));
 	offsetPtr += sizeof(u_int32_t);
 	memcpy(offsetPtr, pkt->data, pkt->datalen);
+
 	return res;
 }
 
@@ -268,11 +268,11 @@ static void* S(void* arg) {
 				pkt = pktEntry->pkt;
 				/*create packet data*/
 				pktData = (char*) createBrpPktData(pkt);
+				int pktLen = BRP_PKT_SIZE(pkt->datalen);
 
 				/*resend the packet which needs to be resent*/
-				sendto(sock, pktData, BRP_PKT_SIZE(pkt->datalen), pkt->flags,
+				sendto(sock, pktData, pktLen, pkt->flags,
 						pkt->addr, sizeof(struct sockaddr)); // todo update the sizeof operator and insert something more "elegant"
-
 				/*free the buffer used to hold the BRP packet data*/
 				free(pktData);
 
@@ -304,6 +304,7 @@ static int drop_recvfrom(int sockfd, void *buf, size_t len, int flags,
 		free(curBuf);
 		return retVal;
 	}
+
 	free(curBuf);
 	return (retVal < 0) ? retVal : 0;
 }
@@ -332,11 +333,13 @@ static void* R(void* arg) {
 		recvfrom(sock, buf, BRP_MTU, 0, &srcAddr, &len);
 		memcpy(&curPktflags, buf, sizeof(uint8_t));
 		memcpy(&curPktSecquenceNo, buf + sizeof(uint8_t), sizeof(uint32_t));
+		printf("R%x %x %x\n", *(buf), *(buf + 1), *(buf+5));
+		int pktLen= BRP_PKT_SIZE(0);
 
 		if (curPktflags & PKT_ACK) {
 			memcpy(replyBuf + sizeof(uint8_t), &curPktSecquenceNo,
 					sizeof(uint32_t));
-			sendto(sock, replyBuf, BRP_PKT_SIZE(0), 0, &srcAddr,
+			sendto(sock, replyBuf, pktLen, 0, &srcAddr,
 					sizeof(struct sockaddr));
 			pthread_mutex_lock(unAckedPktTableMutex);
 			removeBrpPktEntry(sock, curPktSecquenceNo);
@@ -425,6 +428,7 @@ extern ssize_t r_recvfrom(int sockfd, void *buf, size_t len, int flags,
 	brpPktEntry_t* pktEntry = 0;
 	brpPkt_t* curPkt = 0;
 	while (!pktEntry) {
+		sleep(THREAD_WAIT_TIME);
 		pthread_mutex_lock(mutex);
 		pktEntry = getRecvedMsg(sockfd);
 		pthread_mutex_unlock(mutex);
