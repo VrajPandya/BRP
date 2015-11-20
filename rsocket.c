@@ -14,7 +14,9 @@
  * 4 for 32 bit secquence numbers
  *
  * */
-#define BRP_PKT_SIZE(L) L + 1 + 4
+int BRP_PKT_SIZE(int L) {
+	return L + 1 + 4;
+}
 
 typedef struct threadArg {
 	int sockFd;
@@ -27,6 +29,25 @@ typedef struct threadArg {
  *
  * */
 static brpSockInfo_t* masterRecord;
+
+static void traverse_BrpSockInfo(brpSockInfo_t*);
+
+static void traverse_BrpPktEntry(brpPktEntry_t* Entry) {
+	int count = 0;
+	char buf[BRP_MTU];
+	int pktLen = 0;
+	while (Entry) {
+		pktLen = Entry->pkt->datalen;
+		memcpy(buf, Entry->pkt->data, pktLen);
+		buf[pktLen] = 0;
+		printf("count:  %d\n", count);
+		printf("secqNo: %d\n", Entry->pkt->secquenceNumber);
+		printf("len:    %d\n", pktLen);
+		printf("%s\n", buf);
+		count++;
+		Entry = Entry->next;
+	}
+}
 
 static brpPkt_t* createBrpPkt(u_int8_t flags, const char* data,
 		const struct sockaddr* addr, size_t len, int userSendtoFlags) {
@@ -144,6 +165,7 @@ static brpPktEntry_t* addBrpPktEntry(brpPkt_t* pkt, int sock) {
 	brpSockInfo_t* sockInfo = getBrpSockInfo(sock);
 	int seqNo = sockInfo->curSecquenceNumber;
 	sockInfo->curSecquenceNumber = sockInfo->curSecquenceNumber + 1;
+	brpPktEntry_t* first = sockInfo->unAckedpktTable;
 	brpPktEntry_t* temp = sockInfo->unAckedpktTable;
 	if (temp == NULL) {
 		sockInfo->unAckedpktTable = (brpPktEntry_t*) malloc(
@@ -160,6 +182,9 @@ static brpPktEntry_t* addBrpPktEntry(brpPkt_t* pkt, int sock) {
 	temp->pkt = pkt;
 	temp->pkt->secquenceNumber = seqNo;
 	temp->next = NULL;
+
+	traverse_BrpPktEntry(first);
+
 	return temp;
 }
 
@@ -184,6 +209,7 @@ static u_int32_t removeBrpPktEntry(int sock, u_int32_t secquenceNumber) {
 	brpSockInfo_t* sockInfo = getBrpSockInfo(sock);
 	brpPktEntry_t* back_ptr = sockInfo->unAckedpktTable;
 	brpPktEntry_t* fwd_ptr;
+	brpPktEntry_t* first = sockInfo->unAckedpktTable;
 	if (back_ptr == NULL) {
 		return 0;
 	}
@@ -204,12 +230,16 @@ static u_int32_t removeBrpPktEntry(int sock, u_int32_t secquenceNumber) {
 			return secquenceNumber;
 		}
 	}
+
+	traverse_BrpPktEntry(first);
+
 	return 0;
 }
 
 static brpPktEntry_t* storeRecvedMsg(brpPkt_t* pkt, int sock) {
 	brpSockInfo_t* sockInfo = getBrpSockInfo(sock);
 	brpPktEntry_t* temp = sockInfo->recvedMsgTable;
+	brpPktEntry_t* first = temp;
 	if (temp == NULL) {
 		sockInfo->recvedMsgTable = (brpPktEntry_t*) malloc(
 				sizeof(brpPktEntry_t));
@@ -223,16 +253,21 @@ static brpPktEntry_t* storeRecvedMsg(brpPkt_t* pkt, int sock) {
 	}
 	temp->pkt = pkt;
 	temp->next = NULL;
+
+	traverse_BrpPktEntry(first);
+
 	return temp;
 }
 
 static brpPktEntry_t* getRecvedMsg(int sock) {
 	brpSockInfo_t* sockInfo = getBrpSockInfo(sock);
 	brpPktEntry_t* temp = sockInfo->recvedMsgTable;
+	brpPktEntry_t* first = temp;
 	if (temp == NULL) {
 		return NULL;
 	} else {
 		sockInfo->recvedMsgTable = temp->next;
+		traverse_BrpPktEntry(first);
 		return temp;
 	}
 }
@@ -271,8 +306,8 @@ static void* S(void* arg) {
 				int pktLen = BRP_PKT_SIZE(pkt->datalen);
 
 				/*resend the packet which needs to be resent*/
-				sendto(sock, pktData, pktLen, pkt->flags,
-						pkt->addr, sizeof(struct sockaddr)); // todo update the sizeof operator and insert something more "elegant"
+				sendto(sock, pktData, pktLen, pkt->flags, pkt->addr,
+						sizeof(struct sockaddr)); // todo update the sizeof operator and insert something more "elegant"
 				/*free the buffer used to hold the BRP packet data*/
 				free(pktData);
 
@@ -311,11 +346,13 @@ static int drop_recvfrom(int sockfd, void *buf, size_t len, int flags,
 
 static void* R(void* arg) {
 	char buf[BRP_MTU];
+	char* offsetPtr = buf + sizeof(u_int8_t) + sizeof(u_int32_t);
 	char replyBuf[BRP_PKT_SIZE(0)];
 	struct sockaddr srcAddr;
 	brpPkt_t* pkt;
 	threadArg_t* args = (threadArg_t*) arg;
 	int sock = args->sockFd;
+	int recvedPktLen = 0;
 	socklen_t len = sizeof(struct sockaddr);
 	uint8_t curPktflags;
 	uint32_t curPktSecquenceNo;
@@ -329,23 +366,24 @@ static void* R(void* arg) {
 	int brpFlag = PKT_ACK;
 	memcpy(replyBuf, (int*) &brpFlag, sizeof(uint8_t));
 	while (1) {
-
-		recvfrom(sock, buf, BRP_MTU, 0, &srcAddr, &len);
+		recvedPktLen = recvfrom(sock, buf, BRP_MTU, 0, &srcAddr, &len);
 		memcpy(&curPktflags, buf, sizeof(uint8_t));
 		memcpy(&curPktSecquenceNo, buf + sizeof(uint8_t), sizeof(uint32_t));
-		printf("R%x %x %x\n", *(buf), *(buf + 1), *(buf+5));
-		int pktLen= BRP_PKT_SIZE(0);
+		int AckpktLen = BRP_PKT_SIZE(0);
 
 		if (curPktflags & PKT_ACK) {
-			memcpy(replyBuf + sizeof(uint8_t), &curPktSecquenceNo,
-					sizeof(uint32_t));
-			sendto(sock, replyBuf, pktLen, 0, &srcAddr,
-					sizeof(struct sockaddr));
 			pthread_mutex_lock(unAckedPktTableMutex);
 			removeBrpPktEntry(sock, curPktSecquenceNo);
 			pthread_mutex_unlock(unAckedPktTableMutex);
 		} else {
-			pkt = createBrpPkt(0, buf, &srcAddr, BRP_MTU, 0);
+
+			memcpy(replyBuf + sizeof(uint8_t), &curPktSecquenceNo,
+					sizeof(uint32_t));
+			sendto(sock, replyBuf, AckpktLen, 0, &srcAddr,
+					sizeof(struct sockaddr));
+
+			recvedPktLen = (recvedPktLen <= BRP_PKT_SIZE(0))? (BRP_PKT_SIZE(0)): recvedPktLen-(BRP_PKT_SIZE(0));
+			pkt = createBrpPkt(0, offsetPtr, &srcAddr, recvedPktLen, 0);
 			pthread_mutex_lock(recvedMsgTableMutex);
 			storeRecvedMsg(pkt, sock);
 			pthread_mutex_unlock(recvedMsgTableMutex);
@@ -423,6 +461,9 @@ extern ssize_t r_recvfrom(int sockfd, void *buf, size_t len, int flags,
 //r_recvfrom can drop packets now
 
 	/*start set temp variables for receiving packet*/
+	int curLen = (int) *addrlen;
+	int retVal = 0;
+	int copyLen = 0;
 	brpSockInfo_t* sockInfo = getBrpSockInfo(sockfd);
 	pthread_mutex_t* mutex = sockInfo->recvedMsgTableMutex;
 	brpPktEntry_t* pktEntry = 0;
@@ -434,11 +475,12 @@ extern ssize_t r_recvfrom(int sockfd, void *buf, size_t len, int flags,
 		pthread_mutex_unlock(mutex);
 	}
 	curPkt = pktEntry->pkt;
-	len = curPkt->datalen;
-	memcpy(buf, curPkt->data, len);
+	retVal = curPkt->datalen;
+	copyLen = (retVal < len) ? retVal : len;
+	memcpy(buf, curPkt->data, copyLen);
 	if (src_addr != NULL)
-		memcpy(src_addr, curPkt->addr, *addrlen);
-	return 0;
+		memcpy(src_addr, curPkt->addr, curLen);
+	return retVal;
 }
 
 extern int r_close(int fd) {

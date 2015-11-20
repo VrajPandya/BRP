@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
 	int recvlen; /* # bytes received */
 	int sock; /* our socket */
 	int BufSize = 1024;
-	unsigned char buf[BufSize]; /* receive buffer */
+	char buf[BufSize]; /* receive buffer */
 
 	/* create a UDP socket */
 
@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
 				&addrlen);
 		if (recvlen > 0) {
 			buf[recvlen] = 0;
-			printf("%s", buf);
+			printf("%s\n", buf);
 		}
 	}
 	/* never exits */}
