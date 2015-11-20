@@ -43,7 +43,7 @@ static void traverse_BrpPktEntry(brpPktEntry_t* Entry) {
 		printf("count:  %d\n", count);
 		printf("secqNo: %d\n", Entry->pkt->secquenceNumber);
 		printf("len:    %d\n", pktLen);
-		printf("%s\n", buf);
+		printf("%s*\n", buf);
 		count++;
 		Entry = Entry->next;
 	}
@@ -219,8 +219,8 @@ static u_int32_t removeBrpPktEntry(int sock, u_int32_t secquenceNumber) {
 		return secquenceNumber;
 	} else {
 		fwd_ptr = back_ptr->next;
-		while (fwd_ptr->pkt->secquenceNumber != secquenceNumber
-				&& fwd_ptr != NULL) {
+		while (fwd_ptr != NULL
+				&& fwd_ptr->pkt->secquenceNumber != secquenceNumber) {
 			back_ptr = fwd_ptr;
 			fwd_ptr = fwd_ptr->next;
 		}
@@ -350,6 +350,7 @@ static void* R(void* arg) {
 	char replyBuf[BRP_PKT_SIZE(0)];
 	struct sockaddr srcAddr;
 	brpPkt_t* pkt;
+	int AckFlag = PKT_ACK;
 	threadArg_t* args = (threadArg_t*) arg;
 	int sock = args->sockFd;
 	int recvedPktLen = 0;
@@ -371,7 +372,8 @@ static void* R(void* arg) {
 		memcpy(&curPktSecquenceNo, buf + sizeof(uint8_t), sizeof(uint32_t));
 		int AckpktLen = BRP_PKT_SIZE(0);
 
-		if (curPktflags & PKT_ACK) {
+		printf("%d", curPktflags & AckFlag);
+		if (curPktflags & AckFlag) {
 			pthread_mutex_lock(unAckedPktTableMutex);
 			removeBrpPktEntry(sock, curPktSecquenceNo);
 			pthread_mutex_unlock(unAckedPktTableMutex);
@@ -382,7 +384,10 @@ static void* R(void* arg) {
 			sendto(sock, replyBuf, AckpktLen, 0, &srcAddr,
 					sizeof(struct sockaddr));
 
-			recvedPktLen = (recvedPktLen <= BRP_PKT_SIZE(0))? (BRP_PKT_SIZE(0)): recvedPktLen-(BRP_PKT_SIZE(0));
+			recvedPktLen =
+					(recvedPktLen <= BRP_PKT_SIZE(0)) ?
+							(BRP_PKT_SIZE(0)) :
+							recvedPktLen - (BRP_PKT_SIZE(0));
 			pkt = createBrpPkt(0, offsetPtr, &srcAddr, recvedPktLen, 0);
 			pthread_mutex_lock(recvedMsgTableMutex);
 			storeRecvedMsg(pkt, sock);
@@ -453,7 +458,7 @@ extern ssize_t r_sendto(int sockfd, const void *buf, size_t len, int flags,
 	addBrpPktEntry(pktInfo, sockfd); //add packet entry
 	pthread_mutex_unlock(sockInfo->unAckedPktTableMutex);
 	/*end set extra headers*/
-	return sendto(sockfd, buf, len, flags, dest_addr, addrlen);
+	return 0;
 }
 
 extern ssize_t r_recvfrom(int sockfd, void *buf, size_t len, int flags,
