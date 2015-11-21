@@ -21,7 +21,7 @@
 #include<stdint.h>
 #include<pthread.h>
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define SOCK_BRP 11 //a number assigned by the library for BRP protocol sockets
 

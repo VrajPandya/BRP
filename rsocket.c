@@ -24,13 +24,14 @@ typedef struct threadArg {
 
 /*
  * The master record of all the sockets
+ * It is the head of the linked list which
+ * keeps track of all the information that is
+ * stored in the data structure of sockInfo_T.
  *
- *
+ * These information contains
  *
  * */
 static brpSockInfo_t* masterRecord;
-
-static void traverse_BrpSockInfo(brpSockInfo_t*);
 
 static void traverse_BrpPktEntry(brpPktEntry_t* Entry) {
 	int count = 0;
@@ -151,11 +152,11 @@ static int removeBrpSockInfo(int sockfd) {
 		while (fwd_ptr->sock_fd != sockfd && fwd_ptr->next != NULL) {
 			back_ptr = fwd_ptr;
 			fwd_ptr = fwd_ptr->next;
-		}
-		if (fwd_ptr->sock_fd == sockfd) {
-			back_ptr->next = fwd_ptr->next;
-			freeBrpSockInfo(fwd_ptr);
-			return sockfd;
+			if (fwd_ptr->sock_fd == sockfd) {
+				back_ptr->next = fwd_ptr->next;
+				freeBrpSockInfo(fwd_ptr);
+				return sockfd;
+			}
 		}
 	}
 	return -1;
@@ -182,9 +183,9 @@ static brpPktEntry_t* addBrpPktEntry(brpPkt_t* pkt, int sock) {
 	temp->pkt = pkt;
 	temp->pkt->secquenceNumber = seqNo;
 	temp->next = NULL;
-
+#if DEBUG
 	traverse_BrpPktEntry(first);
-
+#endif
 	return temp;
 }
 
@@ -221,18 +222,19 @@ static u_int32_t removeBrpPktEntry(int sock, u_int32_t secquenceNumber) {
 		fwd_ptr = back_ptr->next;
 		while (fwd_ptr != NULL
 				&& fwd_ptr->pkt->secquenceNumber != secquenceNumber) {
+			if (fwd_ptr->pkt->secquenceNumber == secquenceNumber) {
+				back_ptr->next = fwd_ptr->next;
+				freeBrpPktEntry(fwd_ptr);
+				return secquenceNumber;
+			}
 			back_ptr = fwd_ptr;
 			fwd_ptr = fwd_ptr->next;
 		}
-		if (fwd_ptr->pkt->secquenceNumber == secquenceNumber) {
-			back_ptr->next = fwd_ptr->next;
-			freeBrpPktEntry(fwd_ptr);
-			return secquenceNumber;
-		}
+
 	}
-
+#if DEBUG
 	traverse_BrpPktEntry(first);
-
+#endif
 	return 0;
 }
 
@@ -253,9 +255,9 @@ static brpPktEntry_t* storeRecvedMsg(brpPkt_t* pkt, int sock) {
 	}
 	temp->pkt = pkt;
 	temp->next = NULL;
-
+#if DEBUG
 	traverse_BrpPktEntry(first);
-
+#endif
 	return temp;
 }
 
@@ -267,7 +269,9 @@ static brpPktEntry_t* getRecvedMsg(int sock) {
 		return NULL;
 	} else {
 		sockInfo->recvedMsgTable = temp->next;
+#if DEBUG
 		traverse_BrpPktEntry(first);
+#endif
 		return temp;
 	}
 }
@@ -360,25 +364,21 @@ static void* R(void* arg) {
 	brpSockInfo_t* sockInfo = getBrpSockInfo(sock);
 	pthread_mutex_t* unAckedPktTableMutex = sockInfo->unAckedPktTableMutex;
 	pthread_mutex_t* recvedMsgTableMutex = sockInfo->recvedMsgTableMutex;
-	brpPktEntry_t* unAckedPktTable = sockInfo->unAckedpktTable;
-	brpPktEntry_t* recvedMsgTable = sockInfo->recvedMsgTable;
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	free(arg);
 	int brpFlag = PKT_ACK;
 	memcpy(replyBuf, (int*) &brpFlag, sizeof(uint8_t));
 	while (1) {
-		recvedPktLen = recvfrom(sock, buf, BRP_MTU, 0, &srcAddr, &len);
+		recvedPktLen = drop_recvfrom(sock, buf, BRP_MTU, 0, &srcAddr, &len);
 		memcpy(&curPktflags, buf, sizeof(uint8_t));
 		memcpy(&curPktSecquenceNo, buf + sizeof(uint8_t), sizeof(uint32_t));
 		int AckpktLen = BRP_PKT_SIZE(0);
 
-		printf("%d", curPktflags & AckFlag);
 		if (curPktflags & AckFlag) {
 			pthread_mutex_lock(unAckedPktTableMutex);
 			removeBrpPktEntry(sock, curPktSecquenceNo);
 			pthread_mutex_unlock(unAckedPktTableMutex);
 		} else {
-
 			memcpy(replyBuf + sizeof(uint8_t), &curPktSecquenceNo,
 					sizeof(uint32_t));
 			sendto(sock, replyBuf, AckpktLen, 0, &srcAddr,
@@ -389,6 +389,7 @@ static void* R(void* arg) {
 							(BRP_PKT_SIZE(0)) :
 							recvedPktLen - (BRP_PKT_SIZE(0));
 			pkt = createBrpPkt(0, offsetPtr, &srcAddr, recvedPktLen, 0);
+			pkt->secquenceNumber = curPktSecquenceNo;
 			pthread_mutex_lock(recvedMsgTableMutex);
 			storeRecvedMsg(pkt, sock);
 			pthread_mutex_unlock(recvedMsgTableMutex);

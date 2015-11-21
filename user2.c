@@ -49,7 +49,8 @@ int main(int argc, char* argv[]) {
 				&addrlen);
 		if (recvlen > 0) {
 			buf[recvlen] = 0;
-			printf("%s\n", buf);
+			printf("%s", buf);
+			fflush(stdout);
 		}
 	}
 	/* never exits */}
