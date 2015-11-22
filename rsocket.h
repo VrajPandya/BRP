@@ -22,21 +22,34 @@
 #include<pthread.h>
 
 #define DEBUG 0
+/*
+ * a number assigned by the library for BRP protocol sockets
+ * a simple value to identify the type of socket
+ * the value 11 is well out of range of normal
+ * system defined socket type values
+ *
+ * */
+#define SOCK_BRP 11
+/*macro used to determine whether to drop the packets with code or not*/
+#define DROP_PKT 1
 
-#define SOCK_BRP 11 //a number assigned by the library for BRP protocol sockets
-
-#define DROP_PKT 1 // todo if needed use preprocessor to remove the dropPacket fucntion
-
+/*
+ * value of the probability of dropping the message
+ * float value range [0, 1]
+ *
+ * */
 #define DROP_PROB 0.5
-#define MAX_SOCK_NUM 25
+/*number of seconds R thread sleeps*/
 #define THREAD_WAIT_TIME 1
+/*number of seconds S thread sleeps*/
 #define RETRANS_TIME 3
-
+/* value of the flag for 8 bits of flags */
 #define PKT_ACK 1
-
-#define BRP_MTU 1400 //todo need to change so it matches the best estimeted MTU
-				 //of all the networks for now we assume all the packets
-				 //are of less then the MTU
+/*
+ * the maximum bytes a BRP packets are designed to transmit
+ * of all the networks for now we assume all the packets
+ * */
+#define BRP_MTU 1400
 
 /*
  * BRP packet is a collection of the header and the user data which needs
@@ -81,8 +94,12 @@ typedef struct brpPktEntry{
  * It is a linked List which keeps track of all the important information
  * like current sequence number
  * UnACKed packet table
- * and the next pointer
- *
+ * Received message table
+ * pointer to thread S
+ * pointer to thread R
+ * pointer to UnACKed packet table mutex
+ * pointer to received message table mutex
+ * next pointer
  *
  * */
 typedef struct brpSockInfo{
@@ -90,11 +107,11 @@ typedef struct brpSockInfo{
 	uint32_t curSecquenceNumber;
 	struct brpPktEntry* unAckedpktTable;
 	struct brpPktEntry* recvedMsgTable;
-	struct brpSockInfo* next;
 	pthread_t* S;
 	pthread_t* R;
 	pthread_mutex_t* unAckedPktTableMutex;
 	pthread_mutex_t* recvedMsgTableMutex;
+	struct brpSockInfo* next;
 } brpSockInfo_t;
 
 

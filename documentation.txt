@@ -1,0 +1,335 @@
+Results from tests
+
+For string "RAM\n"
+_______________________________
+|P value | No. of transmission|
+|________|____________________|
+|0.05    | 4				  |
+|0.1     | 4				  |
+|0.15    | 4				  |
+|0.2     | 4				  |
+|0.25    | 4				  |
+|0.3     | 4				  |
+|0.35    | 4				  |
+|0.4     | 10				  |
+|0.45    | 10				  |
+|0.5     | 10				  |
+|________|____________________|
+
+For string "Madagascar\n"
+_______________________________
+|P value | No. of transmission|
+|________|____________________|
+|0.05    | 11				  |
+|0.1     | 11				  |
+|0.15    | 11				  |
+|0.2     | 34				  |
+|0.25    | 34				  |
+|0.3     | 68				  |
+|0.35    | 69				  |
+|0.4     | 43				  |
+|0.45    | 53				  |
+|0.5     | 68				  |
+|________|____________________|
+
+
+There are 6 source files in the project. Description of all the files are documented here.
+
+dropMessage.h
+-------------
+
+This is a simple header file which is used to expose the header fuctions defined in the dropMessage.c
+it has two functions
+
+int dropMessage(double p);
+
+double random_generator(double min, double max);
+
+dropMessage.c
+-------------
+
+int dropMessage(double p);
+This function returns 1 if generated random number is less than parameter value p.
+else it returns 0.
+p is probability value which is given by user program.
+
+
+double random_generator(double min, double max);
+This function returns random number generated between min and max values.
+
+user.h
+------
+
+A simple header to keep track of the port numbers of user1 and user2.
+
+user1.c
+-------
+
+A simple file which has no external functions but simply runs test for BRP
+socket library. It runs with user2 Which recives messages. 
+The user1 keeps sending a string of data to the user2 using BRP sockets.
+
+user2.c
+-------
+
+A simple file which has no external functions but simply runs test for BRP
+socket library. It runs with user1 Which sends messages. 
+The user1 keeps sending a string of data to the user2 using BRP sockets.
+
+rsocket.h
+---------
+
+Header file for the library rsocket.
+
+It has many data structures, macro and external functions defined for the 
+library user to use.
+
+macros
+
+#define DEBUG 0
+
+#define SOCK_BRP 11
+a number assigned by the library for BRP protocol sockets
+a simple value to identify the type of socket
+the value 11 is well out of range of normal
+system defined socket type values
+
+
+#define DROP_PKT 1
+macro used to determine whether to drop the packets with code or not
+
+
+#define DROP_PROB 0.5
+value of the probability of dropping the message
+float value range [0, 1]
+
+
+#define THREAD_WAIT_TIME 1
+number of seconds R thread sleeps
+
+#define RETRANS_TIME 3
+number of seconds S thread sleeps
+
+#define PKT_ACK 1
+value of the flag for 8 bits of flags
+
+#define BRP_MTU 1400
+the maximum bytes a BRP packets are designed to transmit
+of all the networks for now we assume all the packets
+
+
+typedef struct brpPkt{
+	/*star BRP header*/
+	uint8_t flags;
+	uint32_t secquenceNumber;
+	/*end BRP header*/
+	struct sockaddr* addr;
+	char* data;
+	size_t datalen;
+	int userSendtoFlags;
+}brpPkt_t;
+BRP packet is a collection of the header and the user data which needs
+to be sent by the user.
+The BRP packet header is an header which is added to the original message
+to add the features like reliability
+
+flags: it is a collection of bit sized data which is used to determine
+	  which kind of packet this is.
+	  The numbers of the bits are from least significant to most significant
+	  bit			use
+	  1 		 	Is ACK bit. set to indicate the packet is ACK packet
+
+
+secquenceNumber: 32 bit number represents a number which is to be sent.
+
+
+typedef struct brpPktEntry{
+	brpPkt_t* pkt;
+	time_t lastupdate;
+	struct brpPktEntry* next;
+} brpPktEntry_t;
+
+BRP packet Entry is the information of the packet
+It contains a pointer to brpPkt_t
+last updated time
+pointer to next entry
+
+
+
+typedef struct brpSockInfo{
+	int sock_fd;
+	uint32_t curSecquenceNumber;
+	struct brpPktEntry* unAckedpktTable;
+	struct brpPktEntry* recvedMsgTable;
+	pthread_t* S;
+	pthread_t* R;
+	pthread_mutex_t* unAckedPktTableMutex;
+	pthread_mutex_t* recvedMsgTableMutex;
+	struct brpSockInfo* next;
+} brpSockInfo_t;
+
+The Socket information structure is used to keep track of current state of
+the socket and all the other related data structures.
+It is a linked List which keeps track of all the important information
+like current sequence number
+UnACKed packet table
+Received message table
+pointer to thread S
+pointer to thread R
+pointer to UnACKed packet table mutex
+pointer to received message table mutex
+next pointer
+
+
+
+function prototypes
+
+All the functions are set as extern so it can be used by the external user.
+
+extern int r_socket(int domain, int type, int protocol);
+r_socket is just like a socket() call which returns a socket descriptor for a 
+socket of basic reliable UDP socket if the type is same as SOCK_BRP else it 
+returns what a simple socket call returns.
+
+
+extern int r_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+r_bind binds a socket to any given name. It is just as same as the bind call.
+
+
+extern ssize_t r_sendto(int sockfd, const void *buf, size_t len, int flags,
+		const struct sockaddr *dest_addr, socklen_t addrlen);
+r_sendto sends the data using the underlying UDP sockets in a reliable manner. 
+This functions guarantees the packet delivery.
+
+
+extern ssize_t r_recvfrom(int sockfd, void *buf, size_t len, int flags,
+		struct sockaddr *src_addr, socklen_t *addrlen);
+
+r_recvfrom receives data from a peer. It does that by retriving packets from
+stored message table.
+
+
+
+extern int r_close(int fd);
+r_close closes the socket
+kills all threads and frees all memory associated with the socket. If 
+any data is there in the received-message table, it is discarded.
+
+rsocket.c
+---------
+
+
+
+typedef struct threadArg {
+	int sockFd;
+} threadArg_t;
+structure to define argument of threads
+
+it contains a reference to the descriptor of the socket
+
+
+
+
+
+int BRP_PKT_SIZE(int L) {
+	return L + 1 + 4;
+}
+add the extra size of the packet headers
+
+1 for 8 bit flags
+4 for 32 bit secquence numbers
+
+
+static brpSockInfo_t* masterRecord;
+The master record of all the sockets
+It is the head of the linked list which
+keeps track of all the information that is
+stored in the data structure of sockInfo_T.
+
+
+
+static void traverse_BrpPktEntry(brpPktEntry_t* Entry)
+
+The function traverses through linked list which starts
+from the pointer provided in the argument
+
+
+
+static brpPkt_t* createBrpPkt(u_int8_t flags, const char* data,	const struct sockaddr* addr, size_t len, int SendtoFlags) 
+
+creates a structure of brpPkt_t and fills the information
+provided in the arguments.
+
+
+
+
+
+static void freeBrpPkt(brpPkt_t* pkt)
+frees the memory occupied by the structure brpPkt_t
+
+
+
+
+static void freeBrpPktEntry(brpPktEntry_t* Entry) 
+frees the memory occupied by the structure brpPktEntry_t
+and frees the memory occupied by the structure brpPkt_t
+
+
+
+
+
+static brpSockInfo_t* addBrpSockInfo(int sockfd)
+adds a record of BRP socket and all the information
+that the socket needs in the linked list pointed by
+masterRecord. 
+
+
+
+
+static void freeBrpSockInfo(brpSockInfo_t* Info) 
+Deallocates all the memory reserved by the brpSockInfor structure
+
+
+
+
+
+static brpSockInfo_t* getBrpSockInfo(int sockfd)
+finds the appropriate structure of brpSockInfo_t
+from the linked list and returns the pointer of
+that node
+
+
+
+
+static int removeBrpSockInfo(int sockfd)
+finds the appropriate structure of brpSockInfo_t
+from the linked list, removes the structure from
+the list and frees the memory occupied by all
+the data structures.
+
+
+
+static brpPktEntry_t* addBrpPktEntry(brpPkt_t* pkt, int sock)
+adds a record of brpPkt in the unAckedPkt table.
+
+
+static brpPktEntry_t* getBrpPktEntry(int sock, u_int32_t secquenceNumber) 
+searches the entry of the brp packet in the unACKed table of given secquence number and socket.
+
+static u_int32_t removeBrpPktEntry(int sock, u_int32_t secquenceNumber)
+removes the entry of the brp packet in the unACKed table of given secquence number and socket.
+
+static brpPktEntry_t* storeRecvedMsg(brpPkt_t* pkt, int sock)
+stores the recived data message in the recived message packet table.
+
+static brpPktEntry_t* getRecvedMsg(int sock)
+takes the fisrt entry out from recived message packet table.
+
+static void* S(void* arg)
+periodically checks the unAckedPkt table and decides which packets to retransmit
+
+static int drop_recvfrom(int sockfd, void *buf, size_t len, int flags, struct sockaddr *src_addr, socklen_t *addrlen)
+programetically drops the packet randomly
+
+static void* R(void* arg)
+keeps listennig to the incoming messges. sends the ACK back and if ACK is recived it removes the entry from unACKedPkt table

@@ -8,6 +8,17 @@
 #include"dropMessage.h"
 
 /*
+ * structure to define argument of threads
+ *
+ * it contains a reference to the descriptor of the socket
+ *
+ * */
+typedef struct threadArg {
+	int sockFd;
+} threadArg_t;
+
+
+/*
  * add the extra size of the packet headers
  *
  * 1 for 8 bit flags
@@ -18,9 +29,6 @@ int BRP_PKT_SIZE(int L) {
 	return L + 1 + 4;
 }
 
-typedef struct threadArg {
-	int sockFd;
-} threadArg_t;
 
 /*
  * The master record of all the sockets
@@ -33,6 +41,11 @@ typedef struct threadArg {
  * */
 static brpSockInfo_t* masterRecord;
 
+/*
+ * The function traverses through linked list which starts
+ * from the pointer provided in the argument
+ *
+ * */
 static void traverse_BrpPktEntry(brpPktEntry_t* Entry) {
 	int count = 0;
 	char buf[BRP_MTU];
@@ -50,6 +63,11 @@ static void traverse_BrpPktEntry(brpPktEntry_t* Entry) {
 	}
 }
 
+/*
+ * creates a structure of brpPkt_t and fills the information
+ * provided in the arguments.
+ *
+ * */
 static brpPkt_t* createBrpPkt(u_int8_t flags, const char* data,
 		const struct sockaddr* addr, size_t len, int userSendtoFlags) {
 	struct sockaddr* tempAddr = 0;
@@ -70,17 +88,33 @@ static brpPkt_t* createBrpPkt(u_int8_t flags, const char* data,
 	return res;
 }
 
+/*
+ * frees the memory occupied by the structure brpPkt_t
+ *
+ * */
 static void freeBrpPkt(brpPkt_t* pkt) {
 	free(pkt->addr);
 	free(pkt->data);
 	free(pkt);
 }
 
+
+/*
+ * frees the memory occupied by the structure brpPktEntry_t
+ * and frees the memory occupied by the structure brpPkt_t
+ *
+ * */
 static void freeBrpPktEntry(brpPktEntry_t* Entry) {
 	freeBrpPkt(Entry->pkt);
 	free(Entry);
 }
 
+/*
+ * adds a record of BRP socket and all the information
+ * that the socket needs in the linked list pointed by
+ * masterRecord.
+ *
+ * */
 static brpSockInfo_t* addBrpSockInfo(int sockfd) {
 	brpSockInfo_t* temp = masterRecord;
 	if (masterRecord == NULL) {
@@ -101,13 +135,22 @@ static brpSockInfo_t* addBrpSockInfo(int sockfd) {
 	return temp;
 }
 
+/*
+ * Deallocates all the memory reserved by the brpSockInfor structure
+ *
+ *
+ * */
 static void freeBrpSockInfo(brpSockInfo_t* Info) {
 	brpPktEntry_t* temp;
 	brpPktEntry_t* next;
 	pthread_cancel(*Info->R);
 	pthread_cancel(*Info->S);
+	free(Info->R);
+	free(Info->S);
 	pthread_mutex_destroy(Info->recvedMsgTableMutex);
 	pthread_mutex_destroy(Info->unAckedPktTableMutex);
+	free(Info->recvedMsgTableMutex);
+	free(Info->unAckedPktTableMutex);
 	temp = Info->recvedMsgTable;
 	while (temp != NULL) {
 		next = temp->next;
@@ -123,6 +166,12 @@ static void freeBrpSockInfo(brpSockInfo_t* Info) {
 	free(Info);
 }
 
+/*
+ * finds the appropriate structure of brpSockInfo_t
+ * from the linked list and returns the pointer of
+ * that node
+ *
+ * */
 static brpSockInfo_t* getBrpSockInfo(int sockfd) {
 	brpSockInfo_t* temp = masterRecord;
 	if (temp == NULL) {
@@ -137,6 +186,13 @@ static brpSockInfo_t* getBrpSockInfo(int sockfd) {
 	return NULL;
 }
 
+/*
+ * finds the appropriate structure of brpSockInfo_t
+ * from the linked list, removes the structure from
+ * the list and frees the memory occupied by all
+ * the data structures.
+ *
+ * */
 static int removeBrpSockInfo(int sockfd) {
 	brpSockInfo_t* back_ptr = masterRecord;
 	brpSockInfo_t* fwd_ptr;
@@ -162,6 +218,10 @@ static int removeBrpSockInfo(int sockfd) {
 	return -1;
 }
 
+/*
+ * adds a record of brpPkt in the unAckedPkt table
+ *
+ * */
 static brpPktEntry_t* addBrpPktEntry(brpPkt_t* pkt, int sock) {
 	brpSockInfo_t* sockInfo = getBrpSockInfo(sock);
 	int seqNo = sockInfo->curSecquenceNumber;
@@ -369,7 +429,11 @@ static void* R(void* arg) {
 	int brpFlag = PKT_ACK;
 	memcpy(replyBuf, (int*) &brpFlag, sizeof(uint8_t));
 	while (1) {
+#if DROP_PKT
 		recvedPktLen = drop_recvfrom(sock, buf, BRP_MTU, 0, &srcAddr, &len);
+#else
+		recvedPktLen = recvfrom(sock, buf, BRP_MTU, 0, &srcAddr, &len);
+#endif
 		memcpy(&curPktflags, buf, sizeof(uint8_t));
 		memcpy(&curPktSecquenceNo, buf + sizeof(uint8_t), sizeof(uint32_t));
 		int AckpktLen = BRP_PKT_SIZE(0);
