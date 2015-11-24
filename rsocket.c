@@ -70,9 +70,13 @@ static void traverse_BrpPktEntry(brpPktEntry_t* Entry) {
  * */
 static brpPkt_t* createBrpPkt(u_int8_t flags, const char* data,
 		const struct sockaddr* addr, size_t len, int userSendtoFlags) {
+	/* start declaration */
 	struct sockaddr* tempAddr = 0;
 	char* curdata;
-	brpPkt_t* res = (brpPkt_t*) malloc(sizeof(brpPkt_t));
+	brpPkt_t* res = (brpPkt_t*) malloc(sizeof(brpPkt_t)); // set space for the resultant packet
+	/* end declaration */
+
+	/* start set the values for the packet */
 	res->datalen = len;
 	res->flags = flags;
 	res->userSendtoFlags = userSendtoFlags;
@@ -85,6 +89,8 @@ static brpPkt_t* createBrpPkt(u_int8_t flags, const char* data,
 	memcpy(curdata, data, len);
 	res->addr = tempAddr;
 	res->data = curdata;
+	/* end set the values for the packet */
+
 	return res;
 }
 
@@ -117,21 +123,27 @@ static void freeBrpPktEntry(brpPktEntry_t* Entry) {
  * */
 static brpSockInfo_t* addBrpSockInfo(int sockfd) {
 	brpSockInfo_t* temp = masterRecord;
+	/* check if the master record itself is empty */
 	if (masterRecord == NULL) {
+		/* set the master record to new record */
 		masterRecord = (brpSockInfo_t*) malloc(sizeof(brpSockInfo_t));
 		temp = masterRecord;
 	} else {
+		/* traverse through the linked list to reach to the end of the linked list */
 		while (temp->next != NULL)
 			temp = temp->next;
+		/* set the next of the last node to new record */
 
 		temp->next = (brpSockInfo_t*) malloc(sizeof(brpSockInfo_t));
 		temp = temp->next;
 	}
+	/* start initialize the data */
 	temp->sock_fd = sockfd;
 	temp->next = NULL;
 	temp->unAckedpktTable = NULL;
 	temp->recvedMsgTable = NULL;
 	temp->curSecquenceNumber = 0;
+	/* start initialize the data */
 	return temp;
 }
 
@@ -143,26 +155,49 @@ static brpSockInfo_t* addBrpSockInfo(int sockfd) {
 static void freeBrpSockInfo(brpSockInfo_t* Info) {
 	brpPktEntry_t* temp;
 	brpPktEntry_t* next;
+
+	/* start snippet stop the thread */
 	pthread_cancel(*Info->R);
 	pthread_cancel(*Info->S);
+	/* end snippet stop the thread */
+
+	/* start free memory of thread ID */
 	free(Info->R);
 	free(Info->S);
+	/* end free memory of thread ID */
+
+	/* start destroy both mutex */
 	pthread_mutex_destroy(Info->recvedMsgTableMutex);
 	pthread_mutex_destroy(Info->unAckedPktTableMutex);
+	/* end destroy both mutex */
+
+	/* start free memory of mutex */
 	free(Info->recvedMsgTableMutex);
 	free(Info->unAckedPktTableMutex);
+	/* end free memory of mutex */
+
+	/* start free all the data in the recvedMsgTable */
 	temp = Info->recvedMsgTable;
+	/* start go throug all the elemets of the list */
 	while (temp != NULL) {
 		next = temp->next;
 		freeBrpPktEntry(temp);
 		temp = next;
 	}
+	/* end go through all the elements of the list */
+	/* end free all the data in the recvedMsgTable */
+
+	/* start free all the data in the unACKedTable */
 	temp = Info->unAckedpktTable;
+	/* start go throug all the elemets of the list */
 	while (temp != NULL) {
 		next = temp->next;
 		freeBrpPktEntry(temp);
 		temp = next;
 	}
+	/* end go through all the elements of the list */
+	/* end free all the data in the unACKedTable */
+
 	free(Info);
 }
 
@@ -174,15 +209,18 @@ static void freeBrpSockInfo(brpSockInfo_t* Info) {
  * */
 static brpSockInfo_t* getBrpSockInfo(int sockfd) {
 	brpSockInfo_t* temp = masterRecord;
+	/* check if the master record itself is NULL */
 	if (temp == NULL) {
 		return NULL;
 	}
+	/* start go through the linked list */
 	while (temp != NULL) {
 		if (temp->sock_fd == sockfd) {
 			return temp;
 		}
 		temp = temp->next;
 	}
+	/* end go through the linked list */
 	return NULL;
 }
 
@@ -194,17 +232,25 @@ static brpSockInfo_t* getBrpSockInfo(int sockfd) {
  *
  * */
 static int removeBrpSockInfo(int sockfd) {
+	/* set forward and backward pointer as we need two nodes to remove the node from
+	 * single linked link list.
+	 * */
 	brpSockInfo_t* back_ptr = masterRecord;
 	brpSockInfo_t* fwd_ptr;
 	if (back_ptr == NULL) {
 		return -1;
 	}
+	/* start check if first record is record that we are looking for */
 	if (back_ptr->sock_fd == sockfd) {
 		masterRecord = back_ptr->next;
 		freeBrpSockInfo(back_ptr);
 		return sockfd;
+	/* end check if first record is record that we are looking for */
 	} else {
+		/* set the forward pointer so we can keep track of both the nodes in the linked list */
 		fwd_ptr = back_ptr->next;
+
+		/* start go throught all the node in the list and deallocate the memory */
 		while (fwd_ptr->sock_fd != sockfd && fwd_ptr->next != NULL) {
 			back_ptr = fwd_ptr;
 			fwd_ptr = fwd_ptr->next;
@@ -214,6 +260,7 @@ static int removeBrpSockInfo(int sockfd) {
 				return sockfd;
 			}
 		}
+		/* end go through all the node in the list and deallocate the memory */
 	}
 	return -1;
 }
@@ -337,13 +384,19 @@ static brpPktEntry_t* getRecvedMsg(int sock) {
 }
 
 static char* createBrpPktData(brpPkt_t* pkt) {
+
+	/* start initialization */
 	char* res = (char*) malloc(BRP_PKT_SIZE(pkt->datalen));
 	char* offsetPtr = res;
+	/* end initialization */
+
+	/* start set up all the bytes of the packet */
 	memcpy(offsetPtr, &pkt->flags, sizeof(u_int8_t));
 	offsetPtr += sizeof(u_int8_t);
 	memcpy(offsetPtr, &pkt->secquenceNumber, sizeof(u_int32_t));
 	offsetPtr += sizeof(u_int32_t);
 	memcpy(offsetPtr, pkt->data, pkt->datalen);
+	/* end set up all the bytes of the packet */
 
 	return res;
 }
