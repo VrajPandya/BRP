@@ -1,4 +1,9 @@
 /*
+Licensed under creative commons 4.0.
+License: Please see the "CREATIVE COMMONS LICENSE" file.
+*/
+
+/*
  * This a library for a reliable UDP protocol.
  * The function call is same as the system defined
  * socket library. The prototype of the function is
