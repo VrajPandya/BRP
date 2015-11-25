@@ -1,3 +1,7 @@
+/*
+Licensed under creative commons 4.0.
+License: Please see the "CREATIVE COMMONS LICENSE" file.
+*/
 #ifndef DROPMESSAGE_H
 #define DROPMESSAGE_H
 
