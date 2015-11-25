@@ -1,4 +1,8 @@
 /*
+Licensed under creative commons 4.0.
+License: Please see the "CREATIVE COMMONS LICENSE" file.
+*/
+/*
  * The user1 keeps sending a string of data to the user2
  * using BRP sockets.
  * */
