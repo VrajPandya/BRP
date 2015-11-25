@@ -1,3 +1,7 @@
+/*
+Licensed under creative commons 4.0.
+License: Please see the "CREATIVE COMMONS LICENSE" file.
+*/
 #include"dropMessage.h"
 #include<stdlib.h>
 /*
